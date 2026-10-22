@@ -1,0 +1,6 @@
+{
+  "name": "SalonFlow Kenya - Salon & Beauty Management Platform",
+  "description": "Premium salon, barbershop, and beauty business management SaaS platform tailored for salons in Kutus, Kirinyaga County, Kenya.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
