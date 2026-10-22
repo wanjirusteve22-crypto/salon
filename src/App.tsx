@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { AppViewRole, Appointment, Service, StaffMember } from './types';
+import { AppViewRole, Appointment, PublicPage, Service, StaffMember } from './types';
 import { 
-  INITIAL_SERVICES, 
-  INITIAL_STAFF, 
   getStoredAppointments, 
-  getStoredInventory 
+  getStoredCustomers, 
+  getStoredInventory, 
+  getStoredServices, 
+  getStoredStaff, 
+  getStoredTenant 
 } from './services/dataStorage';
 
 import { RoleSwitcherBar } from './components/RoleSwitcherBar';
@@ -16,6 +18,14 @@ import { SanctuaryExperience } from './components/SanctuaryExperience';
 import { LocationSection } from './components/LocationSection';
 import { Footer } from './components/Footer';
 
+// Public Pages
+import { ServicesPage } from './components/public/ServicesPage';
+import { StaffPage } from './components/public/StaffPage';
+import { GallerySection } from './components/public/GallerySection';
+import { ContactPage } from './components/public/ContactPage';
+import { LegalPages } from './components/public/LegalPages';
+
+// Dashboards & Modals
 import { BookingModal } from './components/BookingModal';
 import { AppointmentTrackerModal } from './components/AppointmentTrackerModal';
 import { OwnerDashboard } from './components/OwnerDashboard';
@@ -25,10 +35,15 @@ import { SupabaseSchemaModal } from './components/SupabaseSchemaModal';
 
 export default function App() {
   const [currentRole, setCurrentRole] = useState<AppViewRole>('customer');
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [publicPage, setPublicPage] = useState<PublicPage>('home');
+
+  // Stored State
+  const [tenant, setTenant] = useState(getStoredTenant());
+  const [services, setServices] = useState<Service[]>(getStoredServices());
+  const [staff, setStaff] = useState<StaffMember[]>(getStoredStaff());
+  const [appointments, setAppointments] = useState<Appointment[]>(getStoredAppointments());
+  const [customers, setCustomers] = useState(getStoredCustomers());
   const [inventory, setInventory] = useState(getStoredInventory());
-  const [services] = useState<Service[]>(INITIAL_SERVICES);
-  const [staff] = useState<StaffMember[]>(INITIAL_STAFF);
 
   // Modals state
   const [isBookingOpen, setIsBookingOpen] = useState(false);
@@ -41,7 +56,11 @@ export default function App() {
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
 
   const refreshData = () => {
+    setTenant(getStoredTenant());
+    setServices(getStoredServices());
+    setStaff(getStoredStaff());
     setAppointments(getStoredAppointments());
+    setCustomers(getStoredCustomers());
     setInventory(getStoredInventory());
   };
 
@@ -64,7 +83,10 @@ export default function App() {
       {/* Persona & Architecture Switcher Bar */}
       <RoleSwitcherBar
         currentRole={currentRole}
-        onSelectRole={setCurrentRole}
+        onSelectRole={role => {
+          setCurrentRole(role);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
         onOpenSupabaseModal={() => setIsSupabaseOpen(true)}
         onOpenCommercialModal={() => setIsCommercialOpen(true)}
       />
@@ -74,54 +96,97 @@ export default function App() {
         <main className="flex-1">
           {/* Top Navbar */}
           <Navbar
+            activePage={publicPage}
+            onSelectPage={setPublicPage}
             onOpenBooking={() => handleOpenBooking()}
             onOpenTracker={() => setIsTrackerOpen(true)}
           />
 
-          {/* Hero Section with Luxury Photography */}
-          <HeroSection
-            onOpenBooking={() => handleOpenBooking()}
-            onExploreServices={() => {
-              const el = document.getElementById('services');
-              el?.scrollIntoView({ behavior: 'smooth' });
-            }}
-          />
+          {/* PAGE: HOME */}
+          {publicPage === 'home' && (
+            <>
+              <HeroSection
+                onOpenBooking={() => handleOpenBooking()}
+                onExploreServices={() => setPublicPage('services')}
+              />
+              <ServiceMenu
+                services={services}
+                onSelectService={svc => handleOpenBooking(svc)}
+              />
+              <StylistShowcase
+                staff={staff}
+                onSelectStaff={stf => handleOpenBooking(undefined, stf)}
+              />
+              <SanctuaryExperience />
+              <LocationSection />
+            </>
+          )}
 
-          {/* Service Menu & Pricing */}
-          <ServiceMenu
-            services={services}
-            onSelectService={svc => handleOpenBooking(svc)}
-          />
+          {/* PAGE: SERVICES */}
+          {publicPage === 'services' && (
+            <ServicesPage
+              services={services}
+              onSelectService={svc => handleOpenBooking(svc)}
+            />
+          )}
 
-          {/* Master Stylists & Barbers Showcase */}
-          <StylistShowcase
-            staff={staff}
-            onSelectStaff={stf => handleOpenBooking(undefined, stf)}
-          />
+          {/* PAGE: STAFF / MASTER COLLECTIVE */}
+          {publicPage === 'staff' && (
+            <StaffPage
+              staff={staff}
+              onSelectStaff={stf => handleOpenBooking(undefined, stf)}
+            />
+          )}
 
-          {/* Luxury Hygiene, Amenities & Testimonials */}
-          <SanctuaryExperience />
+          {/* PAGE: GALLERY */}
+          {publicPage === 'gallery' && (
+            <GallerySection
+              onBookService={() => handleOpenBooking()}
+            />
+          )}
 
-          {/* Kutus Location & Directions */}
-          <LocationSection />
+          {/* PAGE: CONTACT */}
+          {publicPage === 'contact' && (
+            <ContactPage
+              tenant={tenant}
+            />
+          )}
+
+          {/* PAGE: PRIVACY POLICY */}
+          {publicPage === 'privacy' && (
+            <LegalPages
+              tenant={tenant}
+              type="privacy"
+            />
+          )}
+
+          {/* PAGE: TERMS OF SERVICE */}
+          {publicPage === 'terms' && (
+            <LegalPages
+              tenant={tenant}
+              type="terms"
+            />
+          )}
 
           {/* Footer */}
           <Footer
+            tenant={tenant}
+            onSelectPage={setPublicPage}
             onOpenBooking={() => handleOpenBooking()}
             onOpenTracker={() => setIsTrackerOpen(true)}
             onOpenCommercialModal={() => setIsCommercialOpen(true)}
             onOpenSupabaseModal={() => setIsSupabaseOpen(true)}
           />
 
-          {/* Mobile Bottom Booking Bar (complies with 15% mobile sticky cap) */}
+          {/* Mobile Bottom Booking Bar */}
           <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 p-3 bg-[#FAF8F5]/95 backdrop-blur-md border-t border-[#E8E2D9] flex items-center justify-between gap-3 shadow-lg">
             <div className="text-xs">
-              <span className="font-bold text-[#18181B] block">Aurum Kutus</span>
-              <span className="text-[#9A7B50] font-mono text-[11px]">From KES 1,200</span>
+              <span className="font-bold text-[#18181B] block">{tenant.name.split('&')[0]}</span>
+              <span className="text-[#9A7B50] font-mono text-[11px]">Kutus · KES 1,200+</span>
             </div>
             <button
               onClick={() => handleOpenBooking()}
-              className="px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-[#18181B] bg-[#C5A880] hover:bg-[#B89758] rounded transition-colors shadow-xs"
+              className="px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-[#18181B] bg-[#C5A880] hover:bg-[#B89758] rounded transition-colors shadow-xs cursor-pointer"
             >
               Book Chair
             </button>
@@ -132,10 +197,12 @@ export default function App() {
       {currentRole === 'owner' && (
         <main className="flex-1">
           <OwnerDashboard
+            tenant={tenant}
             appointments={appointments}
             services={services}
             staff={staff}
             inventory={inventory}
+            customers={customers}
             onRefreshData={refreshData}
             onOpenCommercialModal={() => setIsCommercialOpen(true)}
           />

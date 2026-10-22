@@ -2,6 +2,14 @@ import React, { useState } from 'react';
 import { X, Copy, Database, Check, ShieldCheck, Key, FileCode } from 'lucide-react';
 import { SUPABASE_SQL_SCHEMA } from '../services/dataStorage';
 
+import { 
+  testSupabaseConnection, 
+  ConnectionTestResult, 
+  DEFAULT_BUSINESS_SLUG,
+  getSupabaseConfigErrors,
+  isSupabaseConfigured 
+} from '../services/supabaseClient';
+
 interface SupabaseSchemaModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -9,6 +17,8 @@ interface SupabaseSchemaModalProps {
 
 export const SupabaseSchemaModal: React.FC<SupabaseSchemaModalProps> = ({ isOpen, onClose }) => {
   const [copied, setCopied] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
 
   if (!isOpen) return null;
 
@@ -16,6 +26,22 @@ export const SupabaseSchemaModal: React.FC<SupabaseSchemaModalProps> = ({ isOpen
     navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleRunConnectionTest = async () => {
+    setIsTesting(true);
+    try {
+      const result = await testSupabaseConnection();
+      setTestResult(result);
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        message: 'Failed to complete connection test',
+        details: err?.message,
+      });
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   return (
@@ -46,15 +72,70 @@ export const SupabaseSchemaModal: React.FC<SupabaseSchemaModalProps> = ({ isOpen
             SalonFlow Kenya is architected to be 100% database-agnostic. In local demo mode, all bookings and updates persist securely inside browser storage. When deploying for a paying client in Kutus, paste this DDL script into the client's Supabase project SQL Editor to instantiate the multi-tenant tables and security policies.
           </div>
 
-          <div className="p-3 bg-[#F3EFEA] rounded border border-[#E8E2D9] space-y-1.5 text-xs">
-            <div className="flex items-center gap-1.5 font-semibold text-[#18181B]">
-              <Key className="w-3.5 h-3.5 text-[#9A7B50]" />
-              <span>Production Environment Variables (.env)</span>
+          <div className="p-4 bg-[#F3EFEA] rounded-lg border border-[#E8E2D9] space-y-3 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-semibold text-[#18181B]">
+                <Key className="w-4 h-4 text-[#9A7B50]" />
+                <span>Supabase Configuration Status</span>
+              </div>
+              <button
+                onClick={handleRunConnectionTest}
+                disabled={isTesting}
+                className="px-3 py-1 text-xs font-semibold bg-[#C5A880] hover:bg-[#B89758] text-[#18181B] rounded transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {isTesting ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-[#18181B] border-t-transparent rounded-full animate-spin"></span>
+                    <span>Testing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Database className="w-3.5 h-3.5" />
+                    <span>Test Supabase Connection</span>
+                  </>
+                )}
+              </button>
             </div>
-            <pre className="font-mono text-[11px] bg-white p-2.5 rounded border border-[#D9D2C7] overflow-x-auto text-[#18181B]">
-              VITE_SUPABASE_URL="https://[YOUR_PROJECT_ID].supabase.co"{"\n"}
-              VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-            </pre>
+
+            {testResult && (
+              <div
+                className={`p-3 rounded border text-xs space-y-1 ${
+                  testResult.success
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                    : 'bg-rose-50 border-rose-200 text-rose-950'
+                }`}
+              >
+                <div className="flex items-center justify-between font-semibold">
+                  <div className="flex items-center gap-1.5">
+                    {testResult.success ? (
+                      <Check className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <X className="w-4 h-4 text-rose-600" />
+                    )}
+                    <span>{testResult.message}</span>
+                  </div>
+                  {testResult.latencyMs !== undefined && (
+                    <span className="text-[11px] font-mono text-zinc-500">
+                      {testResult.latencyMs}ms ping
+                    </span>
+                  )}
+                </div>
+                {testResult.details && (
+                  <p className="text-[11px] opacity-90 leading-relaxed font-mono">
+                    {testResult.details}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <span className="text-[11px] text-[#71717A] font-medium">Expected Environment Variables (.env / Secrets):</span>
+              <pre className="font-mono text-[11px] bg-white p-2.5 rounded border border-[#D9D2C7] overflow-x-auto text-[#18181B]">
+VITE_SUPABASE_URL="https://[YOUR_PROJECT_ID].supabase.co"{"\n"}
+VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."{"\n"}
+VITE_BUSINESS_SLUG="{DEFAULT_BUSINESS_SLUG}"
+              </pre>
+            </div>
           </div>
 
           <div className="space-y-2">

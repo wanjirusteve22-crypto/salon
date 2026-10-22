@@ -1,6 +1,7 @@
 import React from 'react';
 import { AppViewRole } from '../types';
 import { ShieldCheck, User, Users, Store, Code2, Database } from 'lucide-react';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 
 interface RoleSwitcherBarProps {
   currentRole: AppViewRole;
@@ -15,6 +16,8 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({
   onOpenSupabaseModal,
   onOpenCommercialModal,
 }) => {
+  const isConnected = isSupabaseConfigured();
+
   return (
     <div className="bg-[#18181B] text-[#FAF8F5] text-xs border-b border-[#27272A] px-4 py-2">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
@@ -27,7 +30,7 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({
           <div className="flex items-center bg-[#27272A] p-0.5 rounded">
             <button
               onClick={() => onSelectRole('customer')}
-              className={`px-3 py-1 rounded transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-3 py-1 rounded transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 currentRole === 'customer'
                   ? 'bg-[#C5A880] text-[#18181B] font-semibold shadow-xs'
                   : 'text-[#D4AF37]/80 hover:text-white'
@@ -38,7 +41,7 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({
             </button>
             <button
               onClick={() => onSelectRole('owner')}
-              className={`px-3 py-1 rounded transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-3 py-1 rounded transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 currentRole === 'owner'
                   ? 'bg-[#C5A880] text-[#18181B] font-semibold shadow-xs'
                   : 'text-[#D4AF37]/80 hover:text-white'
@@ -49,7 +52,7 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({
             </button>
             <button
               onClick={() => onSelectRole('staff')}
-              className={`px-3 py-1 rounded transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-3 py-1 rounded transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 currentRole === 'staff'
                   ? 'bg-[#C5A880] text-[#18181B] font-semibold shadow-xs'
                   : 'text-[#D4AF37]/80 hover:text-white'
@@ -63,10 +66,14 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({
 
         {/* Right: Commercial & Supabase Deployment Readiness */}
         <div className="flex items-center gap-4 text-[#A1A1AA] flex-wrap justify-end">
-          <span className="hidden sm:inline-flex items-center gap-1 text-[#E5D3B3] font-mono tabular-nums">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] inline-block"></span>
-            Demo State: Local Persist
-          </span>
+          <button
+            onClick={onOpenSupabaseModal}
+            className="hidden sm:inline-flex items-center gap-1.5 text-[#E5D3B3] font-mono tabular-nums hover:opacity-80 transition-opacity cursor-pointer"
+            title="Click to test Supabase connection and view schema"
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+            {isConnected ? 'Supabase Connected' : 'Demo State: Local Persist'}
+          </button>
           <button
             onClick={onOpenSupabaseModal}
             className="hover:text-white flex items-center gap-1 text-[#E5D3B3] underline underline-offset-2 transition-colors whitespace-nowrap"

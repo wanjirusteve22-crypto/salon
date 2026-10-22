@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Service, StaffMember, Appointment, PaymentMethod } from '../types';
-import { CURRENT_TENANT, generateBookingRef, saveAppointment } from '../services/dataStorage';
-import { X, Calendar, Clock, User, Phone, Check, ArrowRight, CheckCircle2, MessageCircle, Copy } from 'lucide-react';
+import { CURRENT_TENANT } from '../services/dataStorage';
+import { backendService, doTimesOverlap } from '../services/backendService';
+import { getStoredAppointments } from '../services/dataStorage';
+import { X, Calendar, Clock, User, Phone, Check, ArrowRight, CheckCircle2, MessageCircle, Copy, AlertCircle, Loader2 } from 'lucide-react';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -46,6 +48,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('mpesa_till');
   const [notes, setNotes] = useState('');
 
+  // Status & Error handling
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+
   // Confirmation state
   const [confirmedAppointment, setConfirmedAppointment] = useState<Appointment | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -81,38 +87,59 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     setCustomerPhone(val);
   };
 
-  const handleSubmitBooking = (e: React.FormEvent) => {
+  // Check if a time slot has a conflict for the selected stylist
+  const checkSlotOccupied = (slot: string): boolean => {
+    const existing = getStoredAppointments();
+    const duration = currentSelectedService?.durationMin || 60;
+    return existing.some(
+      a =>
+        a.staffId === currentSelectedStaff.id &&
+        a.date === selectedDate &&
+        (a.status === 'scheduled' || a.status === 'in_chair') &&
+        doTimesOverlap(slot, duration, a.timeSlot, 60)
+    );
+  };
+
+  const handleSubmitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !customerPhone.trim()) {
       return;
     }
 
-    const bookingRef = generateBookingRef();
-    const newAppointment: Appointment = {
-      id: `apt-${Date.now()}`,
-      bookingRef,
-      customerName: customerName.trim(),
-      customerPhone: customerPhone.trim(),
-      customerEmail: customerEmail.trim() || undefined,
-      serviceId: currentSelectedService.id,
-      serviceName: currentSelectedService.name,
-      staffId: currentSelectedStaff.id,
-      staffName: currentSelectedStaff.name,
-      date: selectedDate,
-      timeSlot: selectedTime,
-      status: 'scheduled',
-      priceKes: currentSelectedService.priceKes,
-      paymentMethod,
-      paymentStatus: paymentMethod === 'mpesa_till' ? 'pending' : 'unpaid',
-      notes: notes.trim() || undefined,
-      createdAt: new Date().toISOString(),
-      isDemo: true,
-    };
+    setIsSubmitting(true);
+    setBookingError(null);
 
-    saveAppointment(newAppointment);
-    onAppointmentCreated(newAppointment);
-    setConfirmedAppointment(newAppointment);
-    setStep(4);
+    try {
+      const result = await backendService.createAppointment({
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        customerEmail: customerEmail.trim() || undefined,
+        serviceId: currentSelectedService.id,
+        serviceName: currentSelectedService.name,
+        staffId: currentSelectedStaff.id,
+        staffName: currentSelectedStaff.name,
+        date: selectedDate,
+        timeSlot: selectedTime,
+        durationMin: currentSelectedService.durationMin,
+        priceKes: currentSelectedService.priceKes,
+        paymentMethod,
+        notes: notes.trim() || undefined,
+      });
+
+      if (!result.success || !result.appointment) {
+        setBookingError(result.error || 'Failed to create booking. Please check for conflicting appointments.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      onAppointmentCreated(result.appointment);
+      setConfirmedAppointment(result.appointment);
+      setStep(4);
+    } catch (err: any) {
+      setBookingError(err.message || 'An unexpected error occurred during booking.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCopyRef = () => {
@@ -273,39 +300,73 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[#18181B] mb-2">
-                  Available Chair Times
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-[#18181B]">
+                    Available Chair Times
+                  </label>
+                  <span className="text-[11px] text-[#71717A]">
+                    {currentSelectedStaff.name.split(' ')[0]}'s station
+                  </span>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  {TIME_SLOTS.map(slot => (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => setSelectedTime(slot)}
-                      className={`py-2 px-3 text-xs font-mono rounded border transition-all text-center ${
-                        selectedTime === slot
-                          ? 'bg-[#18181B] text-white border-[#18181B] font-semibold'
-                          : 'bg-[#FDFBF7] text-[#52525B] border-[#E8E2D9] hover:border-[#C5A880]'
-                      }`}
-                    >
-                      {slot}
-                    </button>
-                  ))}
+                  {TIME_SLOTS.map(slot => {
+                    const isOccupied = checkSlotOccupied(slot);
+                    const isSelected = selectedTime === slot;
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        disabled={isOccupied}
+                        onClick={() => {
+                          setSelectedTime(slot);
+                          setBookingError(null);
+                        }}
+                        className={`py-2 px-3 text-xs font-mono rounded border transition-all text-center relative ${
+                          isOccupied
+                            ? 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed line-through'
+                            : isSelected
+                            ? 'bg-[#18181B] text-white border-[#18181B] font-semibold'
+                            : 'bg-[#FDFBF7] text-[#52525B] border-[#E8E2D9] hover:border-[#C5A880] cursor-pointer'
+                        }`}
+                      >
+                        {slot}
+                        {isOccupied && (
+                          <span className="block text-[9px] text-zinc-400 no-underline font-sans">
+                            Booked
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+
+              {checkSlotOccupied(selectedTime) && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    The selected time slot ({selectedTime}) is already occupied for {currentSelectedStaff.name}. Please select an open slot above.
+                  </span>
+                </div>
+              )}
 
               <div className="pt-4 border-t border-[#E8E2D9] flex items-center justify-between">
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="px-4 py-2 text-xs font-medium text-[#71717A] hover:text-[#18181B]"
+                  className="px-4 py-2 text-xs font-medium text-[#71717A] hover:text-[#18181B] cursor-pointer"
                 >
                   Back
                 </button>
                 <button
                   type="button"
+                  disabled={checkSlotOccupied(selectedTime)}
                   onClick={() => setStep(3)}
-                  className="px-6 py-2.5 text-xs font-semibold uppercase tracking-wider text-[#18181B] bg-[#C5A880] hover:bg-[#B89758] rounded transition-colors flex items-center gap-2"
+                  className={`px-6 py-2.5 text-xs font-semibold uppercase tracking-wider rounded transition-colors flex items-center gap-2 ${
+                    checkSlotOccupied(selectedTime)
+                      ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
+                      : 'text-[#18181B] bg-[#C5A880] hover:bg-[#B89758] cursor-pointer'
+                  }`}
                 >
                   <span>Client & Contact Info</span>
                   <ArrowRight className="w-4 h-4" />
@@ -317,6 +378,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           {/* STEP 3: Client Details & M-Pesa info */}
           {step === 3 && (
             <form onSubmit={handleSubmitBooking} className="space-y-4">
+              {bookingError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{bookingError}</span>
+                </div>
+              )}
+
               <div className="p-3 bg-[#F3EFEA] rounded border border-[#E8E2D9] flex items-center justify-between text-xs">
                 <div>
                   <div className="font-semibold text-[#18181B]">
@@ -460,10 +528,24 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 text-xs font-semibold uppercase tracking-wider text-[#18181B] bg-[#C5A880] hover:bg-[#B89758] rounded transition-colors flex items-center gap-2 shadow-xs"
+                  disabled={isSubmitting}
+                  className={`px-6 py-2.5 text-xs font-semibold uppercase tracking-wider rounded transition-colors flex items-center gap-2 shadow-xs cursor-pointer ${
+                    isSubmitting
+                      ? 'bg-zinc-300 text-zinc-500 cursor-not-allowed'
+                      : 'text-[#18181B] bg-[#C5A880] hover:bg-[#B89758]'
+                  }`}
                 >
-                  <Check className="w-4 h-4" />
-                  <span>Confirm Chair Booking</span>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-[#18181B]" />
+                      <span>Verifying & Reserving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Confirm Chair Booking</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
